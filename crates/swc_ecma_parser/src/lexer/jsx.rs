@@ -25,7 +25,8 @@ impl<'a> Lexer<'a> {
                     let span = Span::new(cur_pos, cur_pos + BytePos(7), Default::default());
 
                     self.emit_error_span(span, SyntaxError::TS1185);
-                    self.skip_line_comment(6);
+                    // Safety: is_str guarantees that there are at least six bytes available to skip.
+                    unsafe { self.skip_line_comment(6) };
                     self.skip_space::<true>()?;
                     return self.read_token();
                 }

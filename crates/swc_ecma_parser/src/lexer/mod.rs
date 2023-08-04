@@ -183,7 +183,9 @@ impl<'a> Lexer<'a> {
             Some(handler) => handler(self),
             None => {
                 let start = self.cur_pos();
-                self.input.bump_bytes(1);
+                // Safety: As noted, we can guarantee there's at least one byte available to bump
+                // due to check at start of function.
+                unsafe { self.input.bump_bytes(1) };
                 self.error_span(
                     pos_span(start),
                     SyntaxError::UnexpectedChar { c: byte as _ },
@@ -230,7 +232,8 @@ impl<'a> Lexer<'a> {
             }
             Ok(false)
         } else {
-            self.input.reset_to(start);
+            // Safety: position existed at beginning of function.
+            unsafe { self.input.reset_to(start) };
             Ok(false)
         }
     }
@@ -388,7 +391,8 @@ impl<'a> Lexer<'a> {
             if had_line_break_before_last && token == BitOr && self.is_str("||||| ") {
                 let span = fixed_len_span(start, 7);
                 self.emit_error_span(span, SyntaxError::TS1185);
-                self.skip_line_comment(5);
+                // Safety: self.is_str guarantees there are five bytes to skip.
+                unsafe { self.skip_line_comment(5) };
                 self.skip_space::<true>()?;
                 return self.error_span(span, SyntaxError::TS1185);
             }
@@ -599,7 +603,8 @@ impl<'a> Lexer<'a> {
             // Handle -->
             if self.state.had_line_break && c == b'-' && self.eat(b'>') {
                 self.emit_module_mode_error(start, SyntaxError::LegacyCommentInModule);
-                self.skip_line_comment(0);
+                // Safety: guaranteed to be 0 bytes available to skip. If not, we have bigger problems than UB.
+                unsafe { self.skip_line_comment(0) };
                 self.skip_space::<true>()?;
                 return self.read_token();
             }
@@ -635,7 +640,8 @@ impl<'a> Lexer<'a> {
                     //    ^
                     if had_line_break_before_last && self.is_str("====") {
                         self.emit_error_span(fixed_len_span(start, 7), SyntaxError::TS1185);
-                        self.skip_line_comment(4);
+                        // Safety: is_str guarantees there are four bytes available to skip.
+                        unsafe { self.skip_line_comment(4) };
                         self.skip_space::<true>()?;
                         return self.read_token();
                     }
@@ -697,7 +703,8 @@ impl<'a> Lexer<'a> {
 
         // XML style comment. `<!--`
         if c == '<' && self.is(b'!') && self.peek() == Some('-') && self.peek_ahead() == Some('-') {
-            self.skip_line_comment(3);
+            // Safety: combination of is, peek and peek_ahead guarantee at least 3 bytes available to skip.
+            unsafe { self.skip_line_comment(3) };
             self.skip_space::<true>()?;
             self.emit_module_mode_error(start, SyntaxError::LegacyCommentInModule);
 
@@ -747,7 +754,8 @@ impl<'a> Lexer<'a> {
             }
         {
             self.emit_error_span(fixed_len_span(start, 7), SyntaxError::TS1185);
-            self.skip_line_comment(5);
+            // Safety: is_str guaratnees at least 5 characters available to skip.
+            unsafe { self.skip_line_comment(5) };
             self.skip_space::<true>()?;
             return self.read_token();
         }
@@ -983,7 +991,8 @@ impl<'a> Lexer<'a> {
                 chars.push(c.into());
             }
             _ => {
-                self.input.reset_to(state);
+                // Safety: position existed at beginning of function.
+                unsafe { self.input.reset_to(state) };
 
                 chars.push(Char::from('\\'));
                 chars.push(Char::from('u'));
@@ -1106,8 +1115,10 @@ impl<'a> Lexer<'a> {
     }
 
     /// Expects current char to be '/'
-    fn read_regexp(&mut self, start: BytePos) -> LexResult<Token> {
-        self.input.reset_to(start);
+    /// Safety: Requires start to exist within input.
+    unsafe fn read_regexp(&mut self, start: BytePos) -> LexResult<Token> {
+        // Safety: Invariant passed through to caller.
+        unsafe { self.input.reset_to(start) };
 
         debug_assert_eq!(self.cur(), Some('/'));
 

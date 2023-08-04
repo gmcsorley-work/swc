@@ -190,8 +190,8 @@ impl Tokens for Lexer<'_> {
         take(&mut self.errors.borrow_mut())
     }
 
-    fn reset_to(&mut self, to: BytePos) {
-        self.input.reset_to(to);
+    unsafe fn reset_to(&mut self, to: BytePos) {
+        unsafe { self.input.reset_to(to) };
     }
 }
 
@@ -203,7 +203,9 @@ impl<'a> Iterator for Lexer<'a> {
 
         let res = (|| -> Result<Option<_>, _> {
             if let Some(start) = self.state.next_regexp {
-                return Ok(Some(self.read_regexp(start)?));
+                // Safety: next_regexp is only ever set to a value known to be in input
+                // within parser/expr.rs.
+                return Ok(Some(unsafe { self.read_regexp(start)} ?));
             }
 
             if self.state.is_first {
@@ -314,7 +316,8 @@ impl<'a> Iterator for Lexer<'a> {
                             let span = Span::new(cur_pos, cur_pos + BytePos(7), Default::default());
 
                             self.emit_error_span(span, SyntaxError::TS1185);
-                            self.skip_line_comment(6);
+                            // Safety: is_str guarantees there are at least six bytes to skip.
+                            unsafe { self.skip_line_comment(6) };
                             self.skip_space::<true>()?;
                             return self.read_token();
                         }

@@ -45,7 +45,8 @@ impl<'a> StringInput<'a> {
     }
 
     #[inline]
-    pub fn bump_bytes(&mut self, n: usize) {
+    /// Safety: there must be at least n bytes left in the input.
+    pub unsafe fn bump_bytes(&mut self, n: usize) {
         self.reset_to(self.last_pos + BytePos(n as u32));
     }
 }
@@ -184,7 +185,7 @@ impl<'a> Input for StringInput<'a> {
     }
 
     #[inline]
-    fn reset_to(&mut self, to: BytePos) {
+    unsafe fn reset_to(&mut self, to: BytePos) {
         let orig = self.orig;
         let idx = (to - self.orig_start).0 as usize;
 
@@ -268,7 +269,8 @@ pub trait Input: Clone {
     where
         F: FnMut(char) -> bool;
 
-    fn reset_to(&mut self, to: BytePos);
+    /// Safety: to must reference a valid index within self.input.
+    unsafe fn reset_to(&mut self, to: BytePos);
 
     /// Implementors can override the method to make it faster.
     ///
@@ -342,7 +344,8 @@ mod tests {
             assert_eq!(i.last_pos, BytePos(3));
             assert_eq!(i.start_pos_of_iter, BytePos(3));
             assert_eq!(i.cur(), Some('a'));
-            i.reset_to(BytePos(1));
+            // Safety: Specified position known to exist.
+            unsafe { i.reset_to(BytePos(1)) };
 
             assert_eq!(i.cur(), Some('l'));
             assert_eq!(i.last_pos, BytePos(1));

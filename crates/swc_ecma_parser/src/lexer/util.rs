@@ -198,16 +198,23 @@ impl<'a> Lexer<'a> {
 
                 (skip.offset, skip.newline)
             };
-
-            self.input.bump_bytes(offset);
+            // Safety: SkipWhitespace will put offset either at the first non-whitespace
+            // character in the input or at the end of the input, so the invariant seems upheald.
+            // Note: This seems brittle. I wouldn't be certain someone changing SkipWhitespace would
+            // realise the need to uphold this variant.
+            unsafe { self.input.bump_bytes(offset) };
             self.state.had_line_break |= newline;
 
             if LEX_COMMENTS && self.input.is_byte(b'/') {
                 if self.peek() == Some('/') {
-                    self.skip_line_comment(2);
+                    // Safety: is_byte guarantees cur() != None and the condition guarantees that
+                    // peek() != None ensuring that the invariant of having two bytes to skip is satisfied.
+                    unsafe { self.skip_line_comment(2) };
                     continue;
                 } else if self.peek() == Some('*') {
-                    self.skip_block_comment()?;
+                    // Safety: is_byte guarantees cur() != None and the condition guarantees that
+                    // peek() != None ensuring that the invariant of having two bytes to skip is satisfied.
+                    unsafe { self.skip_block_comment() }?;
                     continue;
                 }
             }
@@ -218,10 +225,12 @@ impl<'a> Lexer<'a> {
         Ok(())
     }
 
+    /// Safety: Requires <start_skip> bytes to be available in self.input
     #[inline(never)]
-    pub(super) fn skip_line_comment(&mut self, start_skip: usize) {
+    pub(super) unsafe fn skip_line_comment(&mut self, start_skip: usize) {
         let start = self.cur_pos();
-        self.input.bump_bytes(start_skip);
+        // Safety: Invariant passed through to caller.
+        unsafe { self.input.bump_bytes(start_skip) };
         let slice_start = self.cur_pos();
 
         // foo // comment for foo
@@ -242,7 +251,9 @@ impl<'a> Lexer<'a> {
                 v
             });
 
-        self.input.bump_bytes(idx);
+        // Safety: Index is either the position of a known character in the input or the length of
+        // the remaining input. Either way the invariant is satisfied.
+        unsafe { self.input.bump_bytes(idx) };
         let end = self.cur_pos();
 
         if let Some(comments) = self.comments_buffer.as_mut() {
@@ -263,19 +274,20 @@ impl<'a> Lexer<'a> {
                 });
             }
         }
-
-        self.input.reset_to(end);
+        // Safety: Position known to exist earlier in function.
+        unsafe { self.input.reset_to(end) };
     }
 
     /// Expects current char to be '/' and next char to be '*'.
+    /// Safety: Requires two bytes to be available in self.input
     #[inline(never)]
-    pub(super) fn skip_block_comment(&mut self) -> LexResult<()> {
+    pub(super) unsafe fn skip_block_comment(&mut self) -> LexResult<()> {
         let start = self.cur_pos();
 
         debug_assert_eq!(self.cur(), Some('/'));
         debug_assert_eq!(self.peek(), Some('*'));
-
-        self.input.bump_bytes(2);
+        // Safety: Invariant passed through to caller.
+        unsafe { self.input.bump_bytes(2) };
 
         // jsdoc
         let slice_start = self.cur_pos();

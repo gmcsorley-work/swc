@@ -39,7 +39,9 @@ pub(super) static BYTE_HANDLERS: [ByteHandler; 256] = [
 const ___: ByteHandler = None;
 
 const EOF: ByteHandler = Some(|lexer| {
-    lexer.input.bump_bytes(1);
+    // Safety: See note in Lexer::read_token. We can guarantee we satisfy
+    // the invariant that input.cur() != None.
+    unsafe { lexer.input.bump_bytes(1) };
 
     Ok(None)
 });
@@ -117,7 +119,9 @@ const PIP: ByteHandler = Some(|lexer| lexer.read_token_logical(b'|').map(Some));
 macro_rules! single_char {
     ($name:ident, $c:literal, $token:ident) => {
         const $name: ByteHandler = Some(|lexer| {
-            lexer.input.bump_bytes(1);
+            // Safety: See note in Lexer::read_token. We can guarantee we satisfy
+            // the invariant that input.cur() != None.
+            unsafe { lexer.input.bump_bytes(1) };
             Ok(Some(Token::$token))
         });
     };
@@ -141,9 +145,12 @@ single_char!(BEC, b'}', RBrace);
 /// `^`
 const CRT: ByteHandler = Some(|lexer| {
     // Bitwise xor
-    lexer.input.bump_bytes(1);
+    // Safety: See note in Lexer::read_token. We can guarantee we satisfy
+    // the invariant that input.cur() != None.
+    unsafe { lexer.input.bump_bytes(1) };
     Ok(Some(if lexer.input.cur_as_ascii() == Some(b'=') {
-        lexer.input.bump_bytes(1);
+        // Safety: Condition guarantees invariant input.cur() != None is satisfied.
+        unsafe { lexer.input.bump_bytes(1) };
         Token::AssignOp(AssignOpToken::BitXorAssign)
     } else {
         Token::BinOp(BinOpToken::BitXor)
