@@ -234,7 +234,7 @@ pub trait Input: Clone {
     fn cur(&mut self) -> Option<char>;
     fn peek(&mut self) -> Option<char>;
     fn peek_ahead(&mut self) -> Option<char>;
-    /// Must not be called on any Input where cur == None
+    /// Safety: Must not be called on any Input where cur == None
     unsafe fn bump(&mut self);
 
     /// Returns [None] if it's end of input **or** current character is not an
@@ -293,7 +293,7 @@ pub trait Input: Clone {
     #[inline]
     fn eat_byte(&mut self, c: u8) -> bool {
         if self.is_byte(c) {
-            // Safe because we know cur() != None from is_byte()
+            // Safety: Safe because we know cur() != None from is_byte()
             unsafe { self.bump() };
             true
         } else {
@@ -363,12 +363,12 @@ mod tests {
             assert_eq!(i.start_pos_of_iter, BytePos(4));
             assert_eq!(i.cur(), Some('/'));
 
-            // Safe since preceeding assert guarantees cur() != None
+            // Safety: Safe since preceeding assert guarantees cur() != None
             unsafe { i.bump() };
             assert_eq!(i.last_pos, BytePos(5));
             assert_eq!(i.cur(), Some('d'));
 
-            // Safe since preceeding assert guarantees cur() != None
+            // Safety: Safe since preceeding assert guarantees cur() != None
             unsafe { i.bump() };
             assert_eq!(i.last_pos, BytePos(6));
             assert_eq!(i.cur(), None);
