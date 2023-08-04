@@ -200,8 +200,7 @@ impl<'a> Input for StringInput<'a> {
         if self.iter.as_str().is_empty() {
             false
         } else {
-            // Safety: We checked that `self.iter.as_str().len() > 0`
-            unsafe { *self.iter.as_str().as_bytes().get_unchecked(0) == c }
+            self.iter.as_str().as_bytes().get(0).map(|b| *b == c).unwrap_or(false)
         }
     }
 
