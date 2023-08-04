@@ -51,7 +51,9 @@ const ERR: ByteHandler = Some(|lexer| {
     };
 
     let start = lexer.cur_pos();
-    lexer.input.bump();
+    // Safety: See note in Lexer::read_token. We can guarantee we satisfy
+    // the invariant that input.cur() != None.
+    unsafe { lexer.input.bump() };
     lexer.error_span(pos_span(start), SyntaxError::UnexpectedChar { c })?
 });
 
@@ -89,7 +91,8 @@ const UNI: ByteHandler = Some(|lexer| {
     }
 
     let start = lexer.cur_pos();
-    lexer.input.bump();
+    // Safety: Byte handler is only called for non-last chracters
+    unsafe { lexer.input.bump() } ;
     lexer.error_span(pos_span(start), SyntaxError::UnexpectedChar { c })?
 });
 

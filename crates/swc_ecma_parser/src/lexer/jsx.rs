@@ -33,7 +33,8 @@ impl<'a> Lexer<'a> {
                     //
                     if cur_pos == self.state.start {
                         if cur == '<' && self.state.is_expr_allowed {
-                            self.input.bump();
+                            // Safety: let...match at start of loop guarantees that cur() != None.
+                            unsafe { self.input.bump() };
                             return Ok(Token::JSXTagStart).map(Some);
                         }
                         return self.read_token();
@@ -52,7 +53,8 @@ impl<'a> Lexer<'a> {
                             candidate_list: vec!["`{'>'}`", "`&gt;`"],
                         },
                     );
-                    self.input.bump()
+                    // Safety: let...match at start of loop guarantees that cur() != None.
+                    unsafe { self.input.bump() }
                 }
                 '}' => {
                     self.emit_error(
@@ -61,12 +63,14 @@ impl<'a> Lexer<'a> {
                             candidate_list: vec!["`{'}'}`", "`&rbrace;`"],
                         },
                     );
-                    self.input.bump()
+                    // Safety: let...match at start of loop guarantees that cur() != None.
+                    unsafe { self.input.bump() }
                 }
                 '&' => {
                     out.push_str(self.input.slice(chunk_start, cur_pos));
 
-                    let jsx_entity = self.read_jsx_entity()?;
+                    // Safety: let...match at start of loop guarantees that cur() != None.
+                    let jsx_entity = unsafe { self.read_jsx_entity() }?;
 
                     out.push(jsx_entity.0);
                     chunk_start = self.input.cur_pos();
@@ -75,20 +79,23 @@ impl<'a> Lexer<'a> {
                 _ => {
                     if cur.is_line_terminator() {
                         out.push_str(self.input.slice(chunk_start, cur_pos));
-                        match self.read_jsx_new_line(true)? {
+                        // Safety: let...match at start of loop guarantees that cur() != None.
+                        match unsafe { self.read_jsx_new_line(true) }? {
                             Either::Left(s) => out.push_str(s),
                             Either::Right(c) => out.push(c),
                         }
                         chunk_start = cur_pos;
                     } else {
-                        self.input.bump()
+                        // Safety: let...match at start of loop guarantees that cur() != None.
+                        unsafe { self.input.bump() }
                     }
                 }
             }
         }
     }
 
-    pub(super) fn read_jsx_entity(&mut self) -> LexResult<(char, String)> {
+    /// Safety: Requires that input.cur() != None
+    pub(super) unsafe fn read_jsx_entity(&mut self) -> LexResult<(char, String)> {
         debug_assert!(self.syntax.jsx());
 
         fn from_code(s: &str, radix: u32) -> LexResult<char> {
@@ -113,7 +120,8 @@ impl<'a> Lexer<'a> {
 
         let c = self.input.cur();
         debug_assert_eq!(c, Some('&'));
-        self.input.bump();
+        // Safety: Invariant is passed through to caller.
+        unsafe { self.input.bump() };
 
         let start_pos = self.input.cur_pos();
 
@@ -122,7 +130,8 @@ impl<'a> Lexer<'a> {
                 Some(c) => c,
                 None => break,
             };
-            self.input.bump();
+            //Safety: Match guarantees invariant is satisfied.
+            unsafe { self.input.bump() };
 
             if c == ';' {
                 if let Some(stripped) = s.strip_prefix('#') {
@@ -152,17 +161,20 @@ impl<'a> Lexer<'a> {
         Ok(('&', "&".to_string()))
     }
 
-    pub(super) fn read_jsx_new_line(
+    // Safety: Requires that self.input.cur() != None.
+    pub(super) unsafe fn read_jsx_new_line(
         &mut self,
         normalize_crlf: bool,
     ) -> LexResult<Either<&'static str, char>> {
         debug_assert!(self.syntax.jsx());
 
         let ch = self.input.cur().unwrap();
-        self.input.bump();
+        // Safety: Invariant is passed through to caller.
+        unsafe { self.input.bump() };
 
         let out = if ch == '\r' && self.input.cur() == Some('\n') {
-            self.input.bump();
+            // Safety: Condition guarantees invariant input.cur() != None is satisfied.
+            unsafe { self.input.bump() };
             Either::Left(if normalize_crlf { "\n" } else { "\r\n" })
         } else {
             Either::Right(ch)
@@ -174,14 +186,16 @@ impl<'a> Lexer<'a> {
         Ok(out)
     }
 
-    pub(super) fn read_jsx_str(&mut self, quote: char) -> LexResult<Token> {
+    // Safety: Requires that self.input.cur() != None.
+    pub(super) unsafe fn read_jsx_str(&mut self, quote: char) -> LexResult<Token> {
         debug_assert!(self.syntax.jsx());
 
         let mut raw = String::new();
 
         raw.push(quote);
 
-        self.input.bump(); // `quote`
+        // Safety: Invariant is passed through to caller.
+        unsafe { self.input.bump() }; // `quote`
 
         let mut out = String::new();
         let mut chunk_start = self.input.cur_pos();
@@ -206,7 +220,8 @@ impl<'a> Lexer<'a> {
                 raw.push_str(value);
                 raw.push('\\');
 
-                self.bump();
+                // Safety: let...match at start of loop guarantees invariant.
+                unsafe { self.bump() };
 
                 chunk_start = self.input.cur_pos();
 
@@ -223,7 +238,8 @@ impl<'a> Lexer<'a> {
                 out.push_str(value);
                 raw.push_str(value);
 
-                let jsx_entity = self.read_jsx_entity()?;
+                // Safety: let...match at start of loop guarantees invariant.
+                let jsx_entity = unsafe { self.read_jsx_entity() }?;
 
                 out.push(jsx_entity.0);
                 raw.push_str(&jsx_entity.1);
@@ -235,7 +251,8 @@ impl<'a> Lexer<'a> {
                 out.push_str(value);
                 raw.push_str(value);
 
-                match self.read_jsx_new_line(false)? {
+                // Safety: let...match at start of loop guarantees invariant.
+                match unsafe { self.read_jsx_new_line(false) }? {
                     Either::Left(s) => {
                         out.push_str(s);
                         raw.push_str(s);
@@ -248,7 +265,8 @@ impl<'a> Lexer<'a> {
 
                 chunk_start = cur_pos + BytePos(ch.len_utf8() as _);
             } else {
-                self.input.bump();
+                // Safety: let...match at start of loop guarantees invariant.
+                unsafe { self.input.bump() };
             }
         }
 
@@ -261,7 +279,8 @@ impl<'a> Lexer<'a> {
         // it might be at the end of the file when
         // the string literal is unterminated
         if self.input.peek_ahead().is_some() {
-            self.input.bump();
+            // Safety: peek != None implies invariant cur() != None is satisfied.
+            unsafe { self.input.bump() };
         }
 
         raw.push(quote);

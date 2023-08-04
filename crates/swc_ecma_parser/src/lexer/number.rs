@@ -136,7 +136,8 @@ impl<'a> Lexer<'a> {
             raw_val.push('.');
             raw_str.push('.');
 
-            self.bump();
+            // Safety: Condition guarantees invariant input.cur() != None is satisfied.
+            unsafe { self.bump() };
 
             if starts_with_dot {
                 debug_assert!(self.cur().is_some());
@@ -173,7 +174,8 @@ impl<'a> Lexer<'a> {
         // 1e-2 = 0.01
         match self.cur() {
             Some(e @ 'e') | Some(e @ 'E') => {
-                self.bump();
+                // Safety: Condition guarantees invariant input.cur() != None is satisfied.
+                unsafe { self.bump() };
 
                 let next = match self.cur() {
                     Some(next) => next,
@@ -187,7 +189,8 @@ impl<'a> Lexer<'a> {
                 raw_str.push(e);
 
                 let positive = if next == '+' || next == '-' {
-                    self.bump(); // remove '+', '-'
+                    // Safety: let...match above guarantees invariant input.cur() != None is satisfied.
+                    unsafe { self.bump() }; // remove '+', '-'
 
                     raw_str.push(next);
 
@@ -246,14 +249,16 @@ impl<'a> Lexer<'a> {
         debug_assert_eq!(self.cur(), Some('0'));
 
         self.with_buf(|l, buf| {
-            l.bump();
+            // Safety: See note in read_token. We can guarantee we satisfy the invariant
+            // that input.cur() != None.
+            unsafe { l.bump() };
 
             buf.push('0');
 
             let c = match l.input.cur() {
                 Some(c) => {
-                    l.bump();
-
+                    // Safety: Condition guarantees invariant input.cur() != None is satisfied.
+                    unsafe { l.bump() };
                     c
                 }
                 _ => {
@@ -493,7 +498,8 @@ impl<'a> Lexer<'a> {
                 }
 
                 // Ignore this _ character
-                self.input.bump();
+                // Safety: Loop guard guarantees invariant is satisfied.
+                unsafe { self.input.bump() };
                 raw.push(c);
 
                 continue;
@@ -508,7 +514,8 @@ impl<'a> Lexer<'a> {
 
             raw.push(c);
 
-            self.bump();
+            // Safety: Loop guard guarantees invariant is satisfied.
+            unsafe { self.bump() };
 
             let (t, cont) = op(total, RADIX, val)?;
 

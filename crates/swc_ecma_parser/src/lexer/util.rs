@@ -68,8 +68,8 @@ impl<'a> Lexer<'a> {
     }
 
     #[inline(always)]
-    pub(super) fn bump(&mut self) {
-        self.input.bump()
+    pub(super) unsafe fn bump(&mut self) {
+        unsafe { self.input.bump() }
     }
 
     #[inline(always)]
@@ -280,7 +280,8 @@ impl<'a> Lexer<'a> {
         // jsdoc
         let slice_start = self.cur_pos();
         let mut was_star = if self.input.is_byte(b'*') {
-            self.bump();
+            // Safety: is_byte will return false if input.cur() == None so invariant is satisfied.
+            unsafe { self.bump() };
             true
         } else {
             false
@@ -291,7 +292,8 @@ impl<'a> Lexer<'a> {
         while let Some(c) = self.cur() {
             if was_star && c == '/' {
                 debug_assert_eq!(self.cur(), Some('/'));
-                self.bump(); // '/'
+                // Safety: loop guard guarantees invariant input.cur() != None.
+                unsafe { self.bump() }; // '/'
 
                 let end = self.cur_pos();
 
@@ -329,7 +331,8 @@ impl<'a> Lexer<'a> {
             }
 
             was_star = c == '*';
-            self.bump();
+            // Safety: loop guard guarantees invariant input.cur() != None.
+            unsafe { self.bump() };
         }
 
         self.error(start, SyntaxError::UnterminatedBlockComment)?

@@ -174,7 +174,11 @@ impl<'a> Lexer<'a> {
         };
 
         let handler = unsafe { *(&BYTE_HANDLERS as *const ByteHandler).offset(byte as isize) };
-
+        
+        // Safety: as a result of the check in the first line of this function, we can guarantee
+        // that there is a cur() character in the input when we invoke a ByteHandler. This will be
+        // important since many of the read_token_* functions defined below are called by those
+        // ByteHandlers and rely upon this fact to safely call functions such as input.bump().
         match handler {
             Some(handler) => handler(self),
             None => {
@@ -195,8 +199,13 @@ impl<'a> Lexer<'a> {
         if self.input.is_at_start() && self.read_token_interpreter()? {
             return Ok(None);
         }
+        // POTENTIALLY UNSOUND: read_token_interpreter can advance the input to the end during a loop.
+        // if it does so, it'll still return Ok which will mean we do the following bump
+        // while cur() == None which violates the invariant.
 
-        self.input.bump(); // '#'
+        // Safety: See note in read_token. We can guarantee we satisfy the invariant
+        // that input.cur() != None.
+        unsafe { self.input.bump() }; // '#'
         Ok(Some(Token::Hash))
     }
 
@@ -207,11 +216,14 @@ impl<'a> Lexer<'a> {
         }
 
         let start = self.input.cur_pos();
-        self.input.bump();
+        // Safety: See note in read_token. We can guarantee we satisfy the invariant
+        // that input.cur() != None.
+        unsafe { self.input.bump() };
         let c = self.input.cur();
         if c == Some('!') {
             while let Some(c) = self.input.cur() {
-                self.input.bump();
+                // Safety: loop guard guarantees invariant that input.cur() != None
+                unsafe { self.input.bump() };
                 if c == '\n' || c == '\r' || c == '\u{8232}' || c == '\u{8233}' {
                     return Ok(true);
                 }
@@ -232,7 +244,9 @@ impl<'a> Lexer<'a> {
         let next = match self.input.peek() {
             Some(next) => next,
             None => {
-                self.input.bump();
+                // Safety: See note in read_token. We can guarantee we satisfy the invariant
+                // that input.cur() != None.
+                unsafe { self.input.bump() };
                 return Ok(tok!('.'));
             }
         };
@@ -243,11 +257,17 @@ impl<'a> Lexer<'a> {
             });
         }
 
-        self.input.bump(); // 1st `.`
+        // Safety: See note in read_token. We can guarantee we satisfy the invariant
+        // that input.cur() != None.
+        unsafe { self.input.bump() }; // 1st `.`
 
         if next == '.' && self.input.peek() == Some('.') {
-            self.input.bump(); // 2nd `.`
-            self.input.bump(); // 3rd `.`
+            // Safety: What we read into next is now cur following the bump above so the invariant that
+            // input.cur() != None is satisfied.
+            unsafe { self.input.bump() }; // 2nd `.`
+            // Safey: The Some('.') that we peek-ed is now at cur, so the invariant that
+            // input.cur() != None is satisfied.
+            unsafe { self.input.bump() }; // 3rd `.`
 
             return Ok(tok!("..."));
         }
@@ -262,16 +282,23 @@ impl<'a> Lexer<'a> {
     fn read_token_question_mark(&mut self) -> LexResult<Token> {
         match self.input.peek() {
             Some('?') => {
-                self.input.bump();
-                self.input.bump();
+                // Safety: See note in read_token. We can guarantee we satisfy the invariant
+                // that input.cur() != None.
+                unsafe { self.input.bump() };
+                // Safety: The Some('?') that we peek-ed is now at cur, so the invariant that
+                // input.cur() != None is satisfied.
+                unsafe { self.input.bump() };
                 if self.input.cur() == Some('=') {
-                    self.input.bump();
+                    // Safety: Condition guarantees invariant input.cur() != None is satisfied.
+                    unsafe { self.input.bump() };
                     return Ok(tok!("??="));
                 }
                 Ok(tok!("??"))
             }
             _ => {
-                self.input.bump();
+                // Safety: See note in read_token. We can guarantee we satisfy the invariant
+                // that input.cur() != None.
+                unsafe { self.input.bump() };
                 Ok(tok!('?'))
             }
         }
@@ -282,7 +309,9 @@ impl<'a> Lexer<'a> {
     /// This is extracted as a method to reduce size of `read_token`.
     #[inline(never)]
     fn read_token_colon(&mut self) -> LexResult<Token> {
-        self.input.bump();
+        // Safety: See note in read_token. We can guarantee we satisfy the invariant
+        // that input.cur() != None.
+        unsafe { self.input.bump() };
         Ok(tok!(':'))
     }
 
@@ -324,8 +353,10 @@ impl<'a> Lexer<'a> {
     fn read_token_logical(&mut self, c: u8) -> LexResult<Token> {
         let had_line_break_before_last = self.had_line_break_before_last();
         let start = self.cur_pos();
-
-        self.input.bump();
+        
+        // Safety: See note in read_token. We can guarantee we satisfy the invariant
+        // that input.cur() != None.
+        unsafe { self.input.bump() };
         let token = if c == b'&' { BitAnd } else { BitOr };
 
         // '|=', '&='
@@ -339,10 +370,12 @@ impl<'a> Lexer<'a> {
 
         // '||', '&&'
         if self.input.cur() == Some(c as char) {
-            self.input.bump();
+            // Safety: Condition guarantees invariant input.cur() != None is satisfied.
+            unsafe { self.input.bump() };
 
             if self.input.cur() == Some('=') {
-                self.input.bump();
+                // Safety: Condition guarantees invariant input.cur() != None is satisfied.
+                unsafe { self.input.bump() };
                 return Ok(AssignOp(match token {
                     BitAnd => op!("&&="),
                     BitOr => op!("||="),
@@ -376,7 +409,9 @@ impl<'a> Lexer<'a> {
     #[inline(never)]
     fn read_token_mul_mod(&mut self, c: u8) -> LexResult<Token> {
         let is_mul = c == b'*';
-        self.input.bump();
+        // Safety: See note in read_token. We can guarantee we satisfy the invariant
+        // that input.cur() != None.
+        unsafe { self.input.bump() };
         let mut token = if is_mul { BinOp(Mul) } else { BinOp(Mod) };
 
         // check for **
@@ -408,7 +443,9 @@ impl<'a> Lexer<'a> {
 
         let start = self.cur_pos();
 
-        self.bump(); // '\'
+        // Safety: See note in read_token. We can guarantee we satisfy the invariant
+        // that input.cur() != None.
+        unsafe { self.bump() }; // '\'
 
         let c = match self.cur() {
             Some(c) => c,
@@ -433,7 +470,8 @@ impl<'a> Lexer<'a> {
             '\r' => {
                 raw.push_str("\r");
 
-                self.bump(); // remove '\r'
+                // Safety: match against self.cur() earlier guarantees invariant cur() != None.
+                unsafe { self.bump() }; // remove '\r'
 
                 if self.eat(b'\n') {
                     raw.push_str("\n");
@@ -448,7 +486,8 @@ impl<'a> Lexer<'a> {
                     '\u{2029}' => raw.push_str("\u{2029}"),
                     _ => unreachable!(),
                 }
-                self.bump();
+                // Safety: match against self.cur() earlier guarantees invariant cur() != None.
+                unsafe { self.bump() };
 
                 return Ok(None);
             }
@@ -457,7 +496,8 @@ impl<'a> Lexer<'a> {
             'x' => {
                 raw.push_str("x");
 
-                self.bump(); // 'x'
+                // Safety: match against self.cur() earlier guarantees invariant cur() != None.
+                unsafe { self.bump() }; // 'x'
 
                 match self.read_int_u32::<16>(2, raw)? {
                     Some(val) => return Ok(Some(vec![Char::from(val)])),
@@ -480,7 +520,8 @@ impl<'a> Lexer<'a> {
             '0'..='7' => {
                 raw.push(c);
 
-                self.bump();
+                // Safety: match against self.cur() earlier guarantees invariant cur() != None.
+                unsafe { self.bump() };
 
                 let first_c = if c == '0' {
                     match self.cur() {
@@ -518,8 +559,8 @@ impl<'a> Lexer<'a> {
                                 } else {
                                     value * 8 + v as u8
                                 };
-
-                                self.bump();
+                                // Safety: match pattern guarantees invariant that input.cur() != None.
+                                unsafe { self.bump() };
                                 raw.push(cur.unwrap());
                             }
                             _ => return Ok(Some(vec![Char::from(value as u32)])),
@@ -537,8 +578,8 @@ impl<'a> Lexer<'a> {
                 c
             }
         };
-
-        self.input.bump();
+        // Safety: todo
+        unsafe { self.input.bump() };
 
         Ok(Some(vec![c.into()]))
     }
@@ -546,11 +587,14 @@ impl<'a> Lexer<'a> {
     fn read_token_plus_minus(&mut self, c: u8) -> LexResult<Option<Token>> {
         let start = self.cur_pos();
 
-        self.input.bump();
+        // Safety: See note in read_token. We can guarantee we satisfy the invariant
+        // that input.cur() != None.
+        unsafe { self.input.bump() };
 
         // '++', '--'
         Ok(Some(if self.input.cur() == Some(c as char) {
-            self.input.bump();
+            // Safety: Condition guarantees invariant input.cur() != None is satisfied.
+            unsafe { self.input.bump() };
 
             // Handle -->
             if self.state.had_line_break && c == b'-' && self.eat(b'>') {
@@ -576,7 +620,9 @@ impl<'a> Lexer<'a> {
         let start = self.cur_pos();
         let had_line_break_before_last = self.had_line_break_before_last();
 
-        self.input.bump();
+        // Safety: See note in read_token. We can guarantee we satisfy the invariant
+        // that input.cur() != None.
+        unsafe { self.input.bump() };
 
         Ok(Some(if self.input.eat_byte(b'=') {
             // "=="
@@ -618,8 +664,9 @@ impl<'a> Lexer<'a> {
     fn read_slash(&mut self) -> LexResult<Option<Token>> {
         debug_assert_eq!(self.cur(), Some('/'));
 
-        // Divide operator
-        self.bump();
+        // Safety: See note in read_token. We can guarantee we satisfy the invariant
+        // that input.cur() != None.
+        unsafe { self.bump() };  // Divide operator
 
         Ok(Some(if self.eat(b'=') {
             tok!("/=")
@@ -635,7 +682,9 @@ impl<'a> Lexer<'a> {
         let had_line_break_before_last = self.had_line_break_before_last();
         let start = self.cur_pos();
         let c = self.cur().unwrap();
-        self.bump();
+        // Safety: See note in read_token. We can guarantee we satisfy the invariant
+        // that input.cur() != None.
+        unsafe { self.bump() };
 
         if self.syntax.typescript() && self.ctx.in_type && !self.ctx.should_not_lex_lt_or_gt_as_type
         {
@@ -659,12 +708,14 @@ impl<'a> Lexer<'a> {
 
         // '<<', '>>'
         if self.cur() == Some(c) {
-            self.bump();
+            // Safety: Conditional guarantees invariant input.cur() != None is satisfied.
+            unsafe { self.bump() };
             op = if c == '<' { LShift } else { RShift };
 
             //'>>>'
             if c == '>' && self.cur() == Some(c) {
-                self.bump();
+                // Safety: Conditional guarantees invariant input.cur() != None is satisfied.
+                unsafe { self.bump() };
                 op = ZeroFillRShift;
             }
         }
@@ -828,12 +879,14 @@ impl<'a> Lexer<'a> {
 
                 match c {
                     c if c.is_ident_part() => {
-                        l.bump();
+                        // Safety: loop guard guarantees invariant input.cur() != None.
+                        unsafe { l.bump() };
                         buf.push(c);
                     }
                     // unicode escape
                     '\\' => {
-                        l.bump();
+                        // Safety: loop guard guarantees invariant input.cur() != None.
+                        unsafe { l.bump() };
 
                         if !l.is(b'u') {
                             l.error_span(pos_span(start), SyntaxError::ExpectedUnicodeEscape)?
@@ -877,7 +930,9 @@ impl<'a> Lexer<'a> {
         let mut chars = vec![];
         let mut is_curly = false;
 
-        self.bump(); // 'u'
+        // Safety: See note in read_token. We can guarantee we satisfy the invariant
+        // that input.cur() != None.
+        unsafe { self.bump() }; // 'u'
 
         raw.push_str("u");
 
@@ -942,7 +997,8 @@ impl<'a> Lexer<'a> {
                                 break;
                             }
 
-                            self.bump();
+                            // Safety: Condition guarantees invariant inpur.cur() != None is satisfied.
+                            unsafe { self.bump() };
 
                             chars.push(Char::from(c));
                         } else {
@@ -954,7 +1010,8 @@ impl<'a> Lexer<'a> {
                 } else {
                     for _ in 0..4 {
                         if let Some(c) = self.input.cur() {
-                            self.bump();
+                            // Safety: Condition guarantees invariant inpur.cur() != None is satisfied.
+                            unsafe { self.bump() };
 
                             chars.push(Char::from(c));
                         }
@@ -983,7 +1040,9 @@ impl<'a> Lexer<'a> {
 
         raw.push(quote);
 
-        self.bump(); // '"'
+        // Safety: See note in read_token. We can guarantee we satisfy the invariant
+        // that input.cur() != None.
+        unsafe { self.bump() }; // '"'
 
         self.with_buf(|l, out| {
             while let Some(c) = {
@@ -1001,7 +1060,8 @@ impl<'a> Lexer<'a> {
                     c if c == quote => {
                         raw.push(c);
 
-                        l.bump();
+                        // Safety: loop guard guarantees invariant input.cur() != None.
+                        unsafe { l.bump() };
 
                         return Ok(Token::Str {
                             value: (&**out).into(),
@@ -1030,7 +1090,8 @@ impl<'a> Lexer<'a> {
                         out.push(c);
                         raw.push(c);
 
-                        l.bump();
+                        // Safety: loop guard guarantees invariant input.cur() != None.
+                        unsafe { l.bump() };
                     }
                 }
             }
@@ -1052,7 +1113,9 @@ impl<'a> Lexer<'a> {
 
         let start = self.cur_pos();
 
-        self.bump();
+        // Safety: See note in read_token. We can guarantee we satisfy the invariant
+        // that input.cur() != None.
+        unsafe { self.bump() };
 
         let (mut escaped, mut in_class) = (false, false);
 
@@ -1080,7 +1143,8 @@ impl<'a> Lexer<'a> {
                     escaped = c == '\\';
                 }
 
-                l.bump();
+                // Safety: loop guard guarantees invariant input.cur() != None.
+                unsafe { l.bump() };
                 buf.push(c);
             }
 
@@ -1094,7 +1158,9 @@ impl<'a> Lexer<'a> {
             return Err(Error::new(span, SyntaxError::UnterminatedRegExp));
         }
 
-        self.bump(); // '/'
+        // Safety: self.is above redirects to the is_byte function on StringInput which will be false
+        // if input.cur() == None so the invariant is satisfied here.
+        unsafe { self.bump() }; // '/'
 
         // Spec says "It is a Syntax Error if IdentifierPart contains a Unicode escape
         // sequence." TODO: check for escape
@@ -1121,8 +1187,11 @@ impl<'a> Lexer<'a> {
         if self.input.cur() != Some('#') || self.input.peek() != Some('!') {
             return Ok(None);
         }
-        self.input.bump();
-        self.input.bump();
+        // Safety: Condition guarantees invariant input.cur() != None is satisfied.
+        unsafe { self.input.bump() };
+        // Safey: The Some('!') that we peek-ed is now at cur, so the invariant that
+        // input.cur() != None is satisfied.
+        unsafe { self.input.bump() };
         let s = self.input.uncons_while(|c| !c.is_line_terminator());
         Ok(Some(Atom::new(s)))
     }
@@ -1137,11 +1206,14 @@ impl<'a> Lexer<'a> {
             if c == '`' || (c == '$' && self.peek() == Some('{')) {
                 if start == self.cur_pos() && self.state.last_was_tpl_element() {
                     if c == '$' {
-                        self.bump();
-                        self.bump();
+                        // Safety: Loop guard guarantees that invariant input.cur() != None.
+                        unsafe { self.bump() };
+                        // Safety: Previously peek-ed value will now be at cur() so invariant is satisfied.
+                        unsafe { self.bump() };
                         return Ok(tok!("${"));
                     } else {
-                        self.bump();
+                        // Safety: Loop guard guarantees that invariant input.cur() != None.
+                        unsafe { self.bump() };
                         return Ok(tok!('`'));
                     }
                 }
@@ -1178,7 +1250,8 @@ impl<'a> Lexer<'a> {
 
                 let c = if c == '\r' && self.peek() == Some('\n') {
                     raw.push('\r');
-                    self.bump(); // '\r'
+                    // Safety: Loop guard guarantees that invariant input.cur() != None.
+                    unsafe { self.bump() }; // '\r'
                     '\n'
                 } else {
                     match c {
@@ -1190,7 +1263,10 @@ impl<'a> Lexer<'a> {
                     }
                 };
 
-                self.bump();
+                // Safety: We either came here direct from the loop guard or we went into the first block
+                // of the if statement above. In the latter case, the peek-ed value will now be at cur() and we
+                // can guarantee the invariant cur() != None.
+                unsafe { self.bump() };
 
                 if let Ok(ref mut cooked) = cooked {
                     cooked.push(c);
@@ -1198,7 +1274,8 @@ impl<'a> Lexer<'a> {
 
                 raw.push(c);
             } else {
-                self.bump();
+                // Safety: Loop guard guarantees that invariant input.cur() != None.
+                unsafe { self.bump() };
 
                 if let Ok(ref mut cooked) = cooked {
                     cooked.push(c);

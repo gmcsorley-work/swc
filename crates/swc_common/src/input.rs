@@ -78,7 +78,7 @@ impl<'a> Input for StringInput<'a> {
     }
 
     #[inline]
-    fn bump(&mut self) {
+    unsafe fn bump(&mut self) {
         if let Some((i, c)) = self.iter.next() {
             self.last_pos = self.start_pos_of_iter + BytePos((i + c.len_utf8()) as u32);
         } else {
@@ -215,6 +215,8 @@ impl<'a> Input for StringInput<'a> {
             if let Some((i, _)) = self.iter.next() {
                 self.last_pos = self.start_pos_of_iter + BytePos((i + 1) as u32);
             } else {
+                // Safety: This code should be unreachable since the is_byte implementation
+                // on the StringInput trait will ensure that the iterator has a valid next().
                 unsafe {
                     debug_unreachable!(
                         "We can't enter here as we already checked the state using `is_byte`"
@@ -232,7 +234,8 @@ pub trait Input: Clone {
     fn cur(&mut self) -> Option<char>;
     fn peek(&mut self) -> Option<char>;
     fn peek_ahead(&mut self) -> Option<char>;
-    fn bump(&mut self);
+    /// Must not be called on any Input where cur == None
+    unsafe fn bump(&mut self);
 
     /// Returns [None] if it's end of input **or** current character is not an
     /// ascii character.
@@ -290,7 +293,8 @@ pub trait Input: Clone {
     #[inline]
     fn eat_byte(&mut self, c: u8) -> bool {
         if self.is_byte(c) {
-            self.bump();
+            // Safe because we know cur() != None from is_byte()
+            unsafe { self.bump() };
             true
         } else {
             false
@@ -359,11 +363,13 @@ mod tests {
             assert_eq!(i.start_pos_of_iter, BytePos(4));
             assert_eq!(i.cur(), Some('/'));
 
-            i.bump();
+            // Safe since preceeding assert guarantees cur() != None
+            unsafe { i.bump() };
             assert_eq!(i.last_pos, BytePos(5));
             assert_eq!(i.cur(), Some('d'));
 
-            i.bump();
+            // Safe since preceeding assert guarantees cur() != None
+            unsafe { i.bump() };
             assert_eq!(i.last_pos, BytePos(6));
             assert_eq!(i.cur(), None);
         });
