@@ -116,7 +116,7 @@ impl<'a> Input for StringInput<'a> {
     }
 
     #[inline]
-    fn slice(&mut self, start: BytePos, end: BytePos) -> &str {
+    unsafe fn slice(&mut self, start: BytePos, end: BytePos) -> &str {
         debug_assert!(start <= end, "Cannot slice {:?}..{:?}", start, end);
         let s = self.orig;
 
@@ -256,7 +256,8 @@ pub trait Input: Clone {
 
     fn last_pos(&self) -> BytePos;
 
-    fn slice(&mut self, start: BytePos, end: BytePos) -> &str;
+    /// Safety: start and end must be valid positions within the input.
+    unsafe fn slice(&mut self, start: BytePos, end: BytePos) -> &str;
 
     /// Takes items from stream, testing each one with predicate. returns the
     /// range of items which passed predicate.

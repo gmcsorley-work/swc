@@ -40,7 +40,9 @@ impl<'a> Lexer<'a> {
                         }
                         return self.read_token();
                     }
-                    out.push_str(self.input.slice(chunk_start, cur_pos));
+                    // Safety: chunk_start is set at beginning of function and must be a valid position in input.
+                    // cur_pos must also be a valid input position thanks to the let...match at the beginning of the loop.
+                    out.push_str(unsafe { self.input.slice(chunk_start, cur_pos) });
 
                     return Ok(Token::JSXText {
                         raw: Atom::new(out),
@@ -68,7 +70,9 @@ impl<'a> Lexer<'a> {
                     unsafe { self.input.bump() }
                 }
                 '&' => {
-                    out.push_str(self.input.slice(chunk_start, cur_pos));
+                    // Safety: chunk_start is set at beginning of function and must be a valid position in input.
+                    // cur_pos must also be a valid input position thanks to the let...match at the beginning of the loop.
+                    out.push_str(unsafe { self.input.slice(chunk_start, cur_pos) });
 
                     // Safety: let...match at start of loop guarantees that cur() != None.
                     let jsx_entity = unsafe { self.read_jsx_entity() }?;
@@ -79,7 +83,9 @@ impl<'a> Lexer<'a> {
 
                 _ => {
                     if cur.is_line_terminator() {
-                        out.push_str(self.input.slice(chunk_start, cur_pos));
+                        // Safety: chunk_start is set at beginning of function and must be a valid position in input.
+                        // cur_pos must also be a valid input position thanks to the let...match at the beginning of the loop.
+                        out.push_str(unsafe { self.input.slice(chunk_start, cur_pos) });
                         // Safety: let...match at start of loop guarantees that cur() != None.
                         match unsafe { self.read_jsx_new_line(true) }? {
                             Either::Left(s) => out.push_str(s),
