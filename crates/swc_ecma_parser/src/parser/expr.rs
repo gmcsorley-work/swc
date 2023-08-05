@@ -1632,7 +1632,8 @@ impl<I: Tokens> Parser<I> {
                         in_type: true,
                         ..p.ctx()
                     };
-                    p.input.reset_to(type_args_start);
+                    // Safety: Position known to exist at start of function.
+                    unsafe { p.input.reset_to(type_args_start) }; 
                     p.input.set_ctx(ctx);
                 }
 

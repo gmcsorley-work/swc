@@ -47,7 +47,7 @@ pub trait Tokens: Clone + Iterator<Item = TokenAndSpan> {
 
     fn take_errors(&mut self) -> Vec<Error>;
 
-    fn reset_to(&mut self, to: BytePos);
+    unsafe fn reset_to(&mut self, to: BytePos);
 }
 
 #[derive(Clone)]
@@ -144,7 +144,7 @@ impl Tokens for TokensInput {
         take(&mut self.errors.borrow_mut())
     }
 
-    fn reset_to(&mut self, _: BytePos) {}
+    unsafe fn reset_to(&mut self, _: BytePos) {}
 }
 
 /// Note: Lexer need access to parser's context to lex correctly.
@@ -258,7 +258,7 @@ impl<I: Tokens> Tokens for Capturing<I> {
         self.inner.take_errors()
     }
 
-    fn reset_to(&mut self, to: BytePos) {
+    unsafe fn reset_to(&mut self, to: BytePos) {
         self.inner.reset_to(to);
     }
 }
@@ -504,7 +504,7 @@ impl<I: Tokens> Buffer<I> {
     }
 
     #[inline]
-    pub(crate) fn reset_to(&mut self, to: BytePos) {
+    pub(crate) unsafe fn reset_to(&mut self, to: BytePos) {
         self.cur = None;
         self.iter.reset_to(to)
     }
